@@ -1,14 +1,24 @@
 const words = [
-  "Spider-Man",
+  "Linux",
   "GitHub",
-  "Artificial Intelligence",
-  "Harry Potter",
-  "Pizza",
-  "Minecraft",
-  "Instagram",
-  "Iron Man",
   "Python",
-  "Taylor Swift"
+  "Firefox",
+  "Blender",
+  "Ubuntu",
+  "Docker",
+  "React",
+  "Git",
+  "VLC",
+  "GIMP",
+  "LibreOffice",
+  "WordPress",
+  "Kubernetes",
+  "TensorFlow",
+  "Open Source",
+  "Pull Request",
+  "Repository",
+  "Terminal",
+  "Commit"
 ];
 
 const startScreen = document.getElementById("start-screen");
@@ -59,12 +69,52 @@ const PASS_THRESHOLD = -35;
 let tiltLocked = false;
 const TILT_COOLDOWN = 1200;
 
+async function enterGameMode() {
+  try {
+    if (document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen();
+    }
+
+    if (screen.orientation?.lock) {
+      await screen.orientation.lock("landscape");
+    }
+  } catch (error) {
+    console.log("Fullscreen or orientation lock was unavailable.");
+  }
+}
+
 function showScreen(screenToShow) {
   startScreen.classList.add("hidden");
   gameScreen.classList.add("hidden");
   resultScreen.classList.add("hidden");
 
   screenToShow.classList.remove("hidden");
+}
+
+async function startGame() {
+  permissionMessage.textContent = "";
+
+  try {
+    await enterGameMode();
+    await requestMotionPermission();
+
+    score = 0;
+    timeLeft = 60;
+    currentWordIndex = 0;
+    neutralBeta = null;
+    tiltLocked = false;
+    gameRunning = true;
+
+    shuffleWords();
+
+    scoreElement.textContent = score;
+    wordElement.textContent = words[currentWordIndex];
+
+    showScreen(gameScreen);
+    beginTimer();
+  } catch (error) {
+    permissionMessage.textContent = error.message;
+  }
 }
 
 function shuffleWords() {
