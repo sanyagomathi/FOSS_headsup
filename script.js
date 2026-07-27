@@ -77,8 +77,8 @@ const INITIAL_CALIBRATION_SECONDS = 3;
   Increase these values if accidental guesses happen.
   Reduce these values if tilting feels too difficult.
 */
-const CORRECT_THRESHOLD = 28;
-const PASS_THRESHOLD = -28;
+const CORRECT_THRESHOLD = 20;
+const PASS_THRESHOLD = -20;
 
 /*
   Number of consecutive readings required before a gesture
@@ -106,8 +106,8 @@ const FEEDBACK_DURATION = 500;
   comfortable position. The script waits for stable readings
   and calculates a new neutral angle.
 */
-const RECALIBRATION_DELAY = 350;
-const RECALIBRATION_TIMEOUT = 2200;
+const RECALIBRATION_DELAY = 700;
+const RECALIBRATION_TIMEOUT = 3000;
 const REQUIRED_STABLE_FRAMES = 10;
 const CALIBRATION_SAMPLE_COUNT = 12;
 const STABILITY_THRESHOLD = 1.2;
@@ -115,7 +115,7 @@ const STABILITY_THRESHOLD = 1.2;
 /*
   Set true while testing to display sensor values.
 */
-const SHOW_SENSOR_DEBUG = false;
+const SHOW_SENSOR_DEBUG = true;
 
 /*
   Change this to true if Correct and Pass are reversed
@@ -292,33 +292,42 @@ function getScreenOrientationAngle() {
 function getTiltValue(event) {
   const angle = getScreenOrientationAngle();
 
-  let value;
+  let tilt;
 
-  /*
-    Landscape usually requires gamma.
-    Portrait usually requires beta.
-  */
   if (angle === 90) {
-    value = -event.gamma;
+    // Landscape: phone rotated clockwise
+    tilt = event.gamma;
   } else if (angle === -90 || angle === 270) {
-    value = event.gamma;
+    // Landscape: phone rotated anticlockwise
+    tilt = -event.gamma;
   } else {
-    value = event.beta;
+    // Portrait fallback
+    tilt = event.beta;
   }
 
   if (
-    value === null ||
-    value === undefined ||
-    Number.isNaN(value)
+    tilt === null ||
+    tilt === undefined ||
+    Number.isNaN(tilt)
   ) {
     return null;
   }
 
-  if (REVERSE_TILT_DIRECTION) {
-    value = -value;
+  return REVERSE_TILT_DIRECTION ? -tilt : tilt;
+}
+
+function shortestAngleDifference(current, neutral) {
+  let difference = current - neutral;
+
+  while (difference > 180) {
+    difference -= 360;
   }
 
-  return value;
+  while (difference < -180) {
+    difference += 360;
+  }
+
+  return difference;
 }
 
 function smoothTilt(rawTilt) {
@@ -621,9 +630,10 @@ function handleOrientation(event) {
     return;
   }
 
-  const relativeTilt =
-    currentTilt - neutralTilt;
-
+const relativeTilt = shortestAngleDifference(
+  currentTilt,
+  neutralTilt
+);
   if (SHOW_SENSOR_DEBUG) {
     setStatus(
       `Tilt: ${relativeTilt.toFixed(1)}°`
