@@ -1,30 +1,29 @@
 "use strict";
 
 /* =========================================================
-   WORD DATA
+   WORD LIST
 ========================================================= */
 
 const words = [
   "Linux",
   "GitHub",
-  "Python",
-  "Firefox",
-  "Blender",
-  "Ubuntu",
   "Docker",
+  "Python",
   "React",
+  "Firefox",
+  "Ubuntu",
   "Git",
   "VLC",
+  "Blender",
   "GIMP",
   "LibreOffice",
-  "WordPress",
   "Kubernetes",
   "TensorFlow",
   "Open Source",
-  "Pull Request",
   "Repository",
-  "Terminal",
+  "Pull Request",
   "Commit",
+  "Terminal",
   "JavaScript",
   "Node.js",
   "Next.js",
@@ -34,7 +33,8 @@ const words = [
   "Apache",
   "MySQL",
   "PostgreSQL",
-  "VS Code"
+  "VS Code",
+  "FreeCodeCamp"
 ];
 
 /* =========================================================
@@ -64,50 +64,64 @@ const permissionMessage = document.getElementById(
 const gameCard = document.getElementById("game-card");
 
 /* =========================================================
-   GAME SETTINGS
+   SETTINGS
 ========================================================= */
 
 const GAME_DURATION = 60;
-const CALIBRATION_SECONDS = 3;
+
+const INITIAL_CALIBRATION_SECONDS = 3;
 
 /*
-  Increase these values if the game triggers too easily.
-  Reduce them if tilting feels difficult.
+  Tilt limits.
+
+  Increase these values if accidental guesses happen.
+  Reduce these values if tilting feels too difficult.
 */
-const CORRECT_THRESHOLD = 30;
-const PASS_THRESHOLD = -30;
+const CORRECT_THRESHOLD = 28;
+const PASS_THRESHOLD = -28;
 
 /*
-  The phone must return within this distance of the original
-  angle before another gesture can be detected.
-*/
-const RESET_THRESHOLD = 12;
-
-/*
-  Lower value:
-  smoother but slightly slower.
-
-  Higher value:
-  quicker but more sensitive to shaking.
-*/
-const SMOOTHING_FACTOR = 0.2;
-
-/*
-  Number of consecutive sensor readings required before
-  registering a gesture. This avoids accidental triggers.
+  Number of consecutive readings required before a gesture
+  is accepted.
 */
 const REQUIRED_TRIGGER_FRAMES = 3;
 
 /*
-  Prevents another word from appearing immediately after
-  a correct or pass action.
+  Smooths small sensor movements.
+
+  Lower value = smoother but slower.
+  Higher value = faster but more sensitive.
 */
-const CARD_FEEDBACK_DURATION = 500;
+const SMOOTHING_FACTOR = 0.2;
 
 /*
-  Set this to true while testing to display the tilt angle.
+  Time to show Correct or Pass feedback.
+*/
+const FEEDBACK_DURATION = 500;
+
+/*
+  Recalibration settings.
+
+  After every guess, the player returns the phone to a
+  comfortable position. The script waits for stable readings
+  and calculates a new neutral angle.
+*/
+const RECALIBRATION_DELAY = 350;
+const RECALIBRATION_TIMEOUT = 2200;
+const REQUIRED_STABLE_FRAMES = 10;
+const CALIBRATION_SAMPLE_COUNT = 12;
+const STABILITY_THRESHOLD = 1.2;
+
+/*
+  Set true while testing to display sensor values.
 */
 const SHOW_SENSOR_DEBUG = false;
+
+/*
+  Change this to true if Correct and Pass are reversed
+  on your phone.
+*/
+const REVERSE_TILT_DIRECTION = false;
 
 /* =========================================================
    GAME STATE
@@ -120,75 +134,79 @@ let score = 0;
 let timeLeft = GAME_DURATION;
 
 let gameRunning = false;
-let calibrationComplete = false;
 let motionEnabled = false;
 
-let timerInterval = null;
-let calibrationInterval = null;
+let initialCalibrationComplete = false;
+let recalibrating = false;
+let gestureLocked = false;
 
 let neutralTilt = null;
 let filteredTilt = null;
 
-/*
-  Gesture states:
-
-  ready:
-  A new tilt may be registered.
-
-  correct:
-  A correct tilt was registered. The phone must return to
-  neutral before another gesture can occur.
-
-  pass:
-  A pass tilt was registered. The phone must return to
-  neutral before another gesture can occur.
-*/
-let gestureState = "ready";
-
 let correctFrameCount = 0;
 let passFrameCount = 0;
 
+let recalibrationSamples = [];
+let stableFrameCount = 0;
+let previousCalibrationTilt = null;
+let recalibrationStartTime = 0;
+
+let timerInterval = null;
+let calibrationInterval = null;
+let feedbackTimeout = null;
+
 /* =========================================================
-   GENERAL HELPERS
+   SCREEN HELPERS
 ========================================================= */
 
-function showScreen(screenToShow) {
-  startScreen.classList.add("hidden");
-  gameScreen.classList.add("hidden");
-  resultScreen.classList.add("hidden");
+function showScreen(screen) {
+  if (startScreen) {
+    startScreen.classList.add("hidden");
+  }
 
-  screenToShow.classList.remove("hidden");
+  if (gameScreen) {
+    gameScreen.classList.add("hidden");
+  }
+
+  if (resultScreen) {
+    resultScreen.classList.add("hidden");
+  }
+
+  screen.classList.remove("hidden");
 }
 
+function setStatus(message) {
+  if (tiltStatus) {
+    tiltStatus.textContent = message;
+  }
+}
+
+function setPermissionMessage(message) {
+  if (permissionMessage) {
+    permissionMessage.textContent = message;
+  }
+}
+
+/* =========================================================
+   WORD FUNCTIONS
+========================================================= */
+
 function shuffleArray(array) {
-  const copiedArray = [...array];
+  const shuffled = [...array];
 
-  for (let i = copiedArray.length - 1; i > 0; i--) {
-    const randomIndex = Math.floor(Math.random() * (i + 1));
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const randomIndex = Math.floor(
+      Math.random() * (i + 1)
+    );
 
-    [copiedArray[i], copiedArray[randomIndex]] = [
-      copiedArray[randomIndex],
-      copiedArray[i]
+    [shuffled[i], shuffled[randomIndex]] = [
+      shuffled[randomIndex],
+      shuffled[i]
     ];
   }
 
-  return copiedArray;
+  return shuffled;
 }
-
-function resetFrameCounters() {
-  correctFrameCount = 0;
-  passFrameCount = 0;
-}
-
-function vibrate(pattern) {
-  if ("vibrate" in navigator) {
-    navigator.vibrate(pattern);
-  }
-}
-
-/* =========================================================
-   WORD MANAGEMENT
-========================================================= */
 
 function prepareWords() {
   shuffledWords = shuffleArray(words);
@@ -200,7 +218,8 @@ function displayCurrentWord() {
     prepareWords();
   }
 
-  wordElement.textContent = shuffledWords[currentWordIndex];
+  wordElement.textContent =
+    shuffledWords[currentWordIndex];
 }
 
 function displayNextWord() {
@@ -219,6 +238,10 @@ function displayNextWord() {
 ========================================================= */
 
 function clearCardState() {
+  if (!gameCard) {
+    return;
+  }
+
   gameCard.classList.remove(
     "correct-state",
     "pass-state"
@@ -227,6 +250,10 @@ function clearCardState() {
 
 function showCardState(type) {
   clearCardState();
+
+  if (!gameCard) {
+    return;
+  }
 
   if (type === "correct") {
     gameCard.classList.add("correct-state");
@@ -237,91 +264,14 @@ function showCardState(type) {
   }
 }
 
-/* =========================================================
-   CORRECT AND PASS ACTIONS
-========================================================= */
-
-function registerCorrect(source = "sensor") {
-  if (!gameRunning || !calibrationComplete) {
-    return;
+function vibrate(pattern) {
+  if ("vibrate" in navigator) {
+    navigator.vibrate(pattern);
   }
-
-  /*
-    Sensor gestures are locked until the phone returns
-    to its neutral position.
-  */
-  if (source === "sensor" && gestureState !== "ready") {
-    return;
-  }
-
-  if (source === "sensor") {
-    gestureState = "correct";
-  }
-
-  score++;
-  scoreElement.textContent = score;
-
-  wordElement.textContent = "CORRECT!";
-  tiltStatus.textContent = "Return to the starting position";
-
-  showCardState("correct");
-  vibrate(100);
-
-  setTimeout(() => {
-    if (!gameRunning) {
-      return;
-    }
-
-    clearCardState();
-    displayNextWord();
-
-    if (source === "manual") {
-      gestureState = "ready";
-      tiltStatus.textContent = "Ready";
-    } else {
-      tiltStatus.textContent = "Return phone to neutral";
-    }
-  }, CARD_FEEDBACK_DURATION);
-}
-
-function registerPass(source = "sensor") {
-  if (!gameRunning || !calibrationComplete) {
-    return;
-  }
-
-  if (source === "sensor" && gestureState !== "ready") {
-    return;
-  }
-
-  if (source === "sensor") {
-    gestureState = "pass";
-  }
-
-  wordElement.textContent = "PASS!";
-  tiltStatus.textContent = "Return to the starting position";
-
-  showCardState("pass");
-  vibrate([60, 40, 60]);
-
-  setTimeout(() => {
-    if (!gameRunning) {
-      return;
-    }
-
-    clearCardState();
-    displayNextWord();
-
-    if (source === "manual") {
-      gestureState = "ready";
-      tiltStatus.textContent = "Ready";
-    } else {
-      tiltStatus.textContent = "Return phone to neutral";
-    }
-  }, CARD_FEEDBACK_DURATION);
 }
 
 /* =========================================================
-   LANDSCAPE ORIENTATION DETECTION
+   SENSOR HELPERS
 ========================================================= */
 
 function getScreenOrientationAngle() {
@@ -339,36 +289,37 @@ function getScreenOrientationAngle() {
   return 0;
 }
 
-function getLandscapeTilt(event) {
-  const orientationAngle = getScreenOrientationAngle();
+function getTiltValue(event) {
+  const angle = getScreenOrientationAngle();
+
+  let value;
 
   /*
-    Portrait mode uses beta for front/back movement.
-
-    Landscape mode generally uses gamma because the phone's
-    coordinate system rotates with the device.
+    Landscape usually requires gamma.
+    Portrait usually requires beta.
   */
-
-  if (orientationAngle === 90) {
-    return -event.gamma;
+  if (angle === 90) {
+    value = -event.gamma;
+  } else if (angle === -90 || angle === 270) {
+    value = event.gamma;
+  } else {
+    value = event.beta;
   }
 
   if (
-    orientationAngle === -90 ||
-    orientationAngle === 270
+    value === null ||
+    value === undefined ||
+    Number.isNaN(value)
   ) {
-    return event.gamma;
+    return null;
   }
 
-  /*
-    Portrait fallback.
-  */
-  return event.beta;
-}
+  if (REVERSE_TILT_DIRECTION) {
+    value = -value;
+  }
 
-/* =========================================================
-   SENSOR SMOOTHING
-========================================================= */
+  return value;
+}
 
 function smoothTilt(rawTilt) {
   if (filteredTilt === null) {
@@ -378,110 +329,15 @@ function smoothTilt(rawTilt) {
 
   filteredTilt =
     filteredTilt +
-    SMOOTHING_FACTOR * (rawTilt - filteredTilt);
+    SMOOTHING_FACTOR *
+      (rawTilt - filteredTilt);
 
   return filteredTilt;
 }
 
-/* =========================================================
-   MOTION HANDLER
-========================================================= */
-
-function handleOrientation(event) {
-  if (!gameRunning || !motionEnabled) {
-    return;
-  }
-
-  const rawTilt = getLandscapeTilt(event);
-
-  if (
-    rawTilt === null ||
-    rawTilt === undefined ||
-    Number.isNaN(rawTilt)
-  ) {
-    return;
-  }
-
-  const smoothedTilt = smoothTilt(rawTilt);
-
-  /*
-    During calibration, continuously update the neutral angle.
-    The final reading becomes the player's natural holding
-    position.
-  */
-  if (!calibrationComplete) {
-    neutralTilt = smoothedTilt;
-    return;
-  }
-
-  if (neutralTilt === null) {
-    neutralTilt = smoothedTilt;
-    return;
-  }
-
-  const relativeTilt = smoothedTilt - neutralTilt;
-
-  if (SHOW_SENSOR_DEBUG) {
-    tiltStatus.textContent =
-      `Tilt: ${relativeTilt.toFixed(1)}°`;
-  }
-
-  /*
-    Wait for the phone to return close to neutral before
-    enabling the next gesture.
-  */
-  if (gestureState !== "ready") {
-    resetFrameCounters();
-
-    if (Math.abs(relativeTilt) <= RESET_THRESHOLD) {
-      gestureState = "ready";
-
-      if (!SHOW_SENSOR_DEBUG) {
-        tiltStatus.textContent = "Ready";
-      }
-    }
-
-    return;
-  }
-
-  /*
-    Detect correct tilt.
-  */
-  if (relativeTilt >= CORRECT_THRESHOLD) {
-    correctFrameCount++;
-    passFrameCount = 0;
-
-    if (correctFrameCount >= REQUIRED_TRIGGER_FRAMES) {
-      resetFrameCounters();
-      registerCorrect("sensor");
-    }
-
-    return;
-  }
-
-  /*
-    Detect pass tilt.
-  */
-  if (relativeTilt <= PASS_THRESHOLD) {
-    passFrameCount++;
-    correctFrameCount = 0;
-
-    if (passFrameCount >= REQUIRED_TRIGGER_FRAMES) {
-      resetFrameCounters();
-      registerPass("sensor");
-    }
-
-    return;
-  }
-
-  /*
-    The player is inside the neutral area.
-  */
-  resetFrameCounters();
-
-  if (!SHOW_SENSOR_DEBUG) {
-    tiltStatus.textContent = "Ready";
-  }
+function resetTriggerCounters() {
+  correctFrameCount = 0;
+  passFrameCount = 0;
 }
 
 /* =========================================================
@@ -496,8 +352,7 @@ async function requestMotionPermission() {
   }
 
   /*
-    iPhone and iPad require permission from a user-triggered
-    action such as pressing the Start button.
+    iPhone and iPad require permission from a button click.
   */
   if (
     typeof DeviceOrientationEvent.requestPermission ===
@@ -508,7 +363,7 @@ async function requestMotionPermission() {
 
     if (permission !== "granted") {
       throw new Error(
-        "Motion permission was denied. Please allow Motion & Orientation Access in your browser settings."
+        "Motion permission was denied. Please enable Motion and Orientation Access."
       );
     }
   }
@@ -525,15 +380,10 @@ async function requestMotionPermission() {
 }
 
 /* =========================================================
-   FULLSCREEN AND LANDSCAPE MODE
+   FULLSCREEN AND LANDSCAPE
 ========================================================= */
 
 async function enterGameMode() {
-  /*
-    Fullscreen and orientation locking are not available on
-    every browser. Failure should not stop the game.
-  */
-
   try {
     if (
       document.documentElement.requestFullscreen &&
@@ -542,7 +392,7 @@ async function enterGameMode() {
       await document.documentElement.requestFullscreen();
     }
   } catch (error) {
-    console.log("Fullscreen mode is unavailable.");
+    console.log("Fullscreen is unavailable.");
   }
 
   try {
@@ -558,24 +408,28 @@ async function enterGameMode() {
 }
 
 /* =========================================================
-   CALIBRATION
+   INITIAL CALIBRATION
 ========================================================= */
 
-function startCalibration() {
+function startInitialCalibration() {
   clearInterval(calibrationInterval);
 
-  calibrationComplete = false;
+  initialCalibrationComplete = false;
+  recalibrating = false;
+  gestureLocked = true;
+
   neutralTilt = null;
   filteredTilt = null;
 
-  gestureState = "ready";
-  resetFrameCounters();
+  resetTriggerCounters();
 
-  let countdown = CALIBRATION_SECONDS;
+  let countdown = INITIAL_CALIBRATION_SECONDS;
 
   wordElement.textContent = countdown;
-  tiltStatus.textContent =
-    "Place the phone horizontally on your forehead";
+
+  setStatus(
+    "Hold the phone comfortably on your forehead"
+  );
 
   calibrationInterval = setInterval(() => {
     countdown--;
@@ -588,29 +442,347 @@ function startCalibration() {
     clearInterval(calibrationInterval);
     calibrationInterval = null;
 
-    /*
-      If readings have been received, neutralTilt already
-      contains the player's current forehead position.
-    */
     if (filteredTilt !== null) {
       neutralTilt = filteredTilt;
     }
 
-    calibrationComplete = true;
-    gestureState = "ready";
+    initialCalibrationComplete = true;
+    gestureLocked = false;
+
+    resetTriggerCounters();
 
     displayCurrentWord();
-    tiltStatus.textContent = "Ready";
+    setStatus("Ready");
 
-    beginTimer();
+    startTimer();
   }, 1000);
+}
+
+/* =========================================================
+   RECALIBRATION AFTER EVERY GUESS
+========================================================= */
+
+function beginNeutralRecalibration() {
+  recalibrating = true;
+  gestureLocked = true;
+
+  recalibrationSamples = [];
+  stableFrameCount = 0;
+  previousCalibrationTilt = null;
+
+  recalibrationStartTime = performance.now();
+
+  resetTriggerCounters();
+
+  setStatus(
+    "Return the phone to a comfortable position"
+  );
+}
+
+function processNeutralRecalibration(currentTilt) {
+  const elapsed =
+    performance.now() - recalibrationStartTime;
+
+  /*
+    Gives the player time to return the phone after
+    making a gesture.
+  */
+  if (elapsed < RECALIBRATION_DELAY) {
+    previousCalibrationTilt = currentTilt;
+    return;
+  }
+
+  if (previousCalibrationTilt === null) {
+    previousCalibrationTilt = currentTilt;
+    return;
+  }
+
+  const movement = Math.abs(
+    currentTilt - previousCalibrationTilt
+  );
+
+  previousCalibrationTilt = currentTilt;
+
+  /*
+    Collect readings only while the phone is stable.
+  */
+  if (movement <= STABILITY_THRESHOLD) {
+    stableFrameCount++;
+    recalibrationSamples.push(currentTilt);
+
+    if (
+      recalibrationSamples.length >
+      CALIBRATION_SAMPLE_COUNT
+    ) {
+      recalibrationSamples.shift();
+    }
+  } else {
+    stableFrameCount = 0;
+    recalibrationSamples = [];
+  }
+
+  const stableEnough =
+    stableFrameCount >= REQUIRED_STABLE_FRAMES &&
+    recalibrationSamples.length >=
+      CALIBRATION_SAMPLE_COUNT;
+
+  const timedOut =
+    elapsed >= RECALIBRATION_TIMEOUT;
+
+  if (stableEnough || timedOut) {
+    finishNeutralRecalibration(currentTilt);
+  }
+}
+
+function finishNeutralRecalibration(fallbackTilt) {
+  let newNeutral = fallbackTilt;
+
+  if (recalibrationSamples.length > 0) {
+    const total = recalibrationSamples.reduce(
+      (sum, value) => sum + value,
+      0
+    );
+
+    newNeutral =
+      total / recalibrationSamples.length;
+  }
+
+  neutralTilt = newNeutral;
+
+  /*
+    Restart filtering from the newly calculated neutral.
+  */
+  filteredTilt = newNeutral;
+
+  recalibrating = false;
+  gestureLocked = false;
+
+  recalibrationSamples = [];
+  stableFrameCount = 0;
+  previousCalibrationTilt = null;
+
+  resetTriggerCounters();
+
+  setStatus("Ready");
+}
+
+/* =========================================================
+   SENSOR HANDLER
+========================================================= */
+
+function handleOrientation(event) {
+  if (!gameRunning || !motionEnabled) {
+    return;
+  }
+
+  const rawTilt = getTiltValue(event);
+
+  if (rawTilt === null) {
+    return;
+  }
+
+  const currentTilt = smoothTilt(rawTilt);
+
+  /*
+    During initial calibration, keep calculating the neutral
+    angle continuously.
+  */
+  if (!initialCalibrationComplete) {
+    neutralTilt = currentTilt;
+
+    if (SHOW_SENSOR_DEBUG) {
+      setStatus(
+        `Calibrating: ${currentTilt.toFixed(1)}°`
+      );
+    }
+
+    return;
+  }
+
+  /*
+    After each guess, calculate a new neutral angle.
+  */
+  if (recalibrating) {
+    processNeutralRecalibration(currentTilt);
+
+    if (SHOW_SENSOR_DEBUG) {
+      setStatus(
+        `Recalibrating: ${currentTilt.toFixed(1)}°`
+      );
+    }
+
+    return;
+  }
+
+  if (
+    gestureLocked ||
+    neutralTilt === null
+  ) {
+    return;
+  }
+
+  const relativeTilt =
+    currentTilt - neutralTilt;
+
+  if (SHOW_SENSOR_DEBUG) {
+    setStatus(
+      `Tilt: ${relativeTilt.toFixed(1)}°`
+    );
+  }
+
+  /*
+    Correct gesture.
+  */
+  if (relativeTilt >= CORRECT_THRESHOLD) {
+    correctFrameCount++;
+    passFrameCount = 0;
+
+    if (
+      correctFrameCount >= REQUIRED_TRIGGER_FRAMES
+    ) {
+      resetTriggerCounters();
+      registerCorrect("sensor");
+    }
+
+    return;
+  }
+
+  /*
+    Pass gesture.
+  */
+  if (relativeTilt <= PASS_THRESHOLD) {
+    passFrameCount++;
+    correctFrameCount = 0;
+
+    if (
+      passFrameCount >= REQUIRED_TRIGGER_FRAMES
+    ) {
+      resetTriggerCounters();
+      registerPass("sensor");
+    }
+
+    return;
+  }
+
+  resetTriggerCounters();
+
+  if (!SHOW_SENSOR_DEBUG) {
+    setStatus("Ready");
+  }
+}
+
+/* =========================================================
+   CORRECT AND PASS
+========================================================= */
+
+function registerCorrect(source = "sensor") {
+  if (
+    !gameRunning ||
+    !initialCalibrationComplete ||
+    recalibrating ||
+    gestureLocked
+  ) {
+    return;
+  }
+
+  gestureLocked = true;
+  resetTriggerCounters();
+
+  score++;
+  scoreElement.textContent = score;
+
+  wordElement.textContent = "CORRECT!";
+  setStatus("Correct!");
+
+  showCardState("correct");
+  vibrate(100);
+
+  clearTimeout(feedbackTimeout);
+
+  feedbackTimeout = setTimeout(() => {
+    if (!gameRunning) {
+      return;
+    }
+
+    clearCardState();
+    displayNextWord();
+
+    /*
+      A new neutral angle is calculated after every guess.
+    */
+    beginNeutralRecalibration();
+  }, FEEDBACK_DURATION);
+}
+
+function registerPass(source = "sensor") {
+  if (
+    !gameRunning ||
+    !initialCalibrationComplete ||
+    recalibrating ||
+    gestureLocked
+  ) {
+    return;
+  }
+
+  gestureLocked = true;
+  resetTriggerCounters();
+
+  wordElement.textContent = "PASS!";
+  setStatus("Passed!");
+
+  showCardState("pass");
+  vibrate([60, 40, 60]);
+
+  clearTimeout(feedbackTimeout);
+
+  feedbackTimeout = setTimeout(() => {
+    if (!gameRunning) {
+      return;
+    }
+
+    clearCardState();
+    displayNextWord();
+
+    /*
+      A new neutral angle is calculated after every guess.
+    */
+    beginNeutralRecalibration();
+  }, FEEDBACK_DURATION);
+}
+
+/* =========================================================
+   MANUAL BUTTONS
+========================================================= */
+
+function handleManualCorrect() {
+  if (
+    !gameRunning ||
+    recalibrating ||
+    gestureLocked
+  ) {
+    return;
+  }
+
+  registerCorrect("manual");
+}
+
+function handleManualPass() {
+  if (
+    !gameRunning ||
+    recalibrating ||
+    gestureLocked
+  ) {
+    return;
+  }
+
+  registerPass("manual");
 }
 
 /* =========================================================
    TIMER
 ========================================================= */
 
-function beginTimer() {
+function startTimer() {
   clearInterval(timerInterval);
 
   timerElement.textContent = timeLeft;
@@ -626,36 +798,44 @@ function beginTimer() {
 }
 
 /* =========================================================
-   START AND END GAME
+   GAME FUNCTIONS
 ========================================================= */
 
 async function startGame() {
-  permissionMessage.textContent = "";
-  startButton.disabled = true;
+  setPermissionMessage("");
+
+  if (startButton) {
+    startButton.disabled = true;
+  }
 
   try {
     /*
-      Motion permission must remain directly connected to the
-      button press, especially on iOS.
+      Permission must be requested directly after a user click,
+      especially on iPhone.
     */
     await requestMotionPermission();
-
     await enterGameMode();
 
     clearInterval(timerInterval);
     clearInterval(calibrationInterval);
+    clearTimeout(feedbackTimeout);
 
     score = 0;
     timeLeft = GAME_DURATION;
 
     gameRunning = true;
-    calibrationComplete = false;
+    initialCalibrationComplete = false;
+    recalibrating = false;
+    gestureLocked = true;
 
     neutralTilt = null;
     filteredTilt = null;
 
-    gestureState = "ready";
-    resetFrameCounters();
+    recalibrationSamples = [];
+    stableFrameCount = 0;
+    previousCalibrationTilt = null;
+
+    resetTriggerCounters();
 
     scoreElement.textContent = score;
     timerElement.textContent = timeLeft;
@@ -664,30 +844,37 @@ async function startGame() {
     prepareWords();
 
     showScreen(gameScreen);
-    startCalibration();
+    startInitialCalibration();
   } catch (error) {
     console.error(error);
 
-    permissionMessage.textContent =
+    setPermissionMessage(
       error.message ||
-      "Unable to access the phone's motion sensor.";
+        "Unable to access the motion sensor."
+    );
   } finally {
-    startButton.disabled = false;
+    if (startButton) {
+      startButton.disabled = false;
+    }
   }
 }
 
 function endGame() {
   gameRunning = false;
-  calibrationComplete = false;
+  initialCalibrationComplete = false;
+  recalibrating = false;
+  gestureLocked = true;
 
   clearInterval(timerInterval);
   clearInterval(calibrationInterval);
+  clearTimeout(feedbackTimeout);
 
   timerInterval = null;
   calibrationInterval = null;
+  feedbackTimeout = null;
 
   clearCardState();
-  resetFrameCounters();
+  resetTriggerCounters();
 
   finalScoreElement.textContent = score;
 
@@ -701,77 +888,76 @@ async function restartGame() {
 }
 
 /* =========================================================
-   MANUAL CONTROLS
+   ORIENTATION CHANGE
 ========================================================= */
 
-function handleManualCorrect() {
-  if (gestureState !== "ready") {
+function handleOrientationChange() {
+  if (!gameRunning) {
     return;
   }
 
-  gestureState = "manual";
-  registerCorrect("manual");
-}
+  /*
+    Recalculate neutral if the player rotates the phone
+    during the round.
+  */
+  filteredTilt = null;
+  neutralTilt = null;
 
-function handleManualPass() {
-  if (gestureState !== "ready") {
-    return;
-  }
+  recalibrating = true;
+  gestureLocked = true;
 
-  gestureState = "manual";
-  registerPass("manual");
+  recalibrationSamples = [];
+  stableFrameCount = 0;
+  previousCalibrationTilt = null;
+
+  recalibrationStartTime = performance.now();
+
+  resetTriggerCounters();
+
+  setStatus("Hold steady while recalibrating");
 }
 
 /* =========================================================
    EVENT LISTENERS
 ========================================================= */
 
-startButton.addEventListener("click", startGame);
-restartButton.addEventListener("click", restartGame);
+if (startButton) {
+  startButton.addEventListener(
+    "click",
+    startGame
+  );
+}
 
-correctButton.addEventListener(
-  "click",
-  handleManualCorrect
+if (restartButton) {
+  restartButton.addEventListener(
+    "click",
+    restartGame
+  );
+}
+
+if (correctButton) {
+  correctButton.addEventListener(
+    "click",
+    handleManualCorrect
+  );
+}
+
+if (passButton) {
+  passButton.addEventListener(
+    "click",
+    handleManualPass
+  );
+}
+
+window.addEventListener(
+  "orientationchange",
+  handleOrientationChange
 );
-
-passButton.addEventListener(
-  "click",
-  handleManualPass
-);
-
-/*
-  Recalibrate when the phone changes orientation during
-  an active game.
-*/
-window.addEventListener("orientationchange", () => {
-  if (!gameRunning) {
-    return;
-  }
-
-  filteredTilt = null;
-  neutralTilt = null;
-  gestureState = "ready";
-
-  resetFrameCounters();
-
-  tiltStatus.textContent =
-    "Hold steady while the phone recalibrates";
-
-  setTimeout(() => {
-    if (!gameRunning) {
-      return;
-    }
-
-    if (filteredTilt !== null) {
-      neutralTilt = filteredTilt;
-    }
-
-    tiltStatus.textContent = "Ready";
-  }, 1000);
-});
 
 /* =========================================================
    INITIAL SCREEN
 ========================================================= */
 
-showScreen(startScreen);
+if (startScreen) {
+  showScreen(startScreen);
+}
