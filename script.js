@@ -106,8 +106,8 @@ const FEEDBACK_DURATION = 500;
   comfortable position. The script waits for stable readings
   and calculates a new neutral angle.
 */
-const RECALIBRATION_DELAY = 700;
-const RECALIBRATION_TIMEOUT = 3000;
+const RECALIBRATION_DELAY = 3000;
+const RECALIBRATION_TIMEOUT = 5000;
 const REQUIRED_STABLE_FRAMES = 10;
 const CALIBRATION_SAMPLE_COUNT = 12;
 const STABILITY_THRESHOLD = 1.2;
@@ -296,10 +296,10 @@ function getTiltValue(event) {
 
   if (angle === 90) {
     // Landscape: phone rotated clockwise
-    tilt = event.gamma;
+    tilt = -event.gamma;
   } else if (angle === -90 || angle === 270) {
     // Landscape: phone rotated anticlockwise
-    tilt = -event.gamma;
+    tilt = event.gamma;
   } else {
     // Portrait fallback
     tilt = event.beta;
