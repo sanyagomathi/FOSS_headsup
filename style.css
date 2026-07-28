@@ -192,45 +192,10 @@ button {
       circle at 70% 74%,
       rgba(49, 92, 198, 0.12),
       transparent 28%
-    ),
-    linear-gradient(
-      135deg,
-      #ffffff 0%,
-      #f7f9ff 55%,
-      #eef3ff 100%
-    );
+    ),;
+    background: #1479d2;
 }
 
-
-.shape-one {
-  width: 440px;
-  height: 900px;
-
-  top: -300px;
-  left: 80px;
-
-  background:
-    linear-gradient(
-      180deg,
-      rgba(34, 185, 87, 0.06),
-      rgba(255, 255, 255, 0)
-    );
-}
-
-.shape-two {
-  width: 520px;
-  height: 1100px;
-
-  right: 100px;
-  bottom: -540px;
-
-  background:
-    linear-gradient(
-      180deg,
-      rgba(49, 92, 198, 0.08),
-      rgba(255, 255, 255, 0)
-    );
-}
 
 .hero-content {
   width: min(880px, 90%);
@@ -529,36 +494,6 @@ button {
     color 0.25s ease;
 }
 
-.card-decoration {
-  position: absolute;
-
-  width: 290px;
-  height: 580px;
-
-  transform: rotate(-35deg);
-}
-
-.decoration-left {
-  left: -180px;
-
-  background:
-    linear-gradient(
-      180deg,
-      rgba(34, 185, 87, 0.12),
-      rgba(34, 185, 87, 0)
-    );
-}
-
-.decoration-right {
-  right: -190px;
-
-  background:
-    linear-gradient(
-      180deg,
-      rgba(49, 92, 198, 0),
-      rgba(49, 92, 198, 0.14)
-    );
-}
 
 .card-label {
   position: relative;
@@ -678,18 +613,7 @@ button {
 /* Result screen */
 
 .result-screen {
-  background:
-    radial-gradient(
-      circle at 30% 25%,
-      rgba(34, 185, 87, 0.1),
-      transparent 30%
-    ),
-    radial-gradient(
-      circle at 70% 75%,
-      rgba(49, 92, 198, 0.13),
-      transparent 30%
-    ),
-    #f7f9fd;
+  background: #f7f9fd;
 }
 
 .result-card {
