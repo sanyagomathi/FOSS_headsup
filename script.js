@@ -100,19 +100,6 @@ const SMOOTHING_FACTOR = 0.2;
 const FEEDBACK_DURATION = 500;
 
 /*
-  Recalibration settings.
-
-  After every guess, the player returns the phone to a
-  comfortable position. The script waits for stable readings
-  and calculates a new neutral angle.
-*/
-const RECALIBRATION_DELAY = 1000;
-const RECALIBRATION_TIMEOUT = 3000;
-const REQUIRED_STABLE_FRAMES = 10;
-const CALIBRATION_SAMPLE_COUNT = 12;
-const STABILITY_THRESHOLD = 1.2;
-
-/*
   Set true while testing to display sensor values.
 */
 const SHOW_SENSOR_DEBUG = true;
@@ -136,27 +123,20 @@ let timeLeft = GAME_DURATION;
 let gameRunning = false;
 let motionEnabled = false;
 
+const RETURN_TO_NEUTRAL_THRESHOLD = 12;
+let timerInterval = null;
+let calibrationInterval = null;
+let feedbackTimeout = null;
+
 let initialCalibrationComplete = false;
-let recalibrating = false;
 let gestureLocked = false;
+let waitingForNeutral = false;
 
 let neutralTilt = null;
 let filteredTilt = null;
 
 let correctFrameCount = 0;
 let passFrameCount = 0;
-
-let recalibrationSamples = [];
-let stableFrameCount = 0;
-let previousCalibrationTilt = null;
-let recalibrationStartTime = 0;
-
-let timerInterval = null;
-let calibrationInterval = null;
-let feedbackTimeout = null;
-
-let useGammaAxis = true;
-let gammaSign = 1;
 
 /* =========================================================
    SCREEN HELPERS
@@ -278,41 +258,27 @@ function vibrate(pattern) {
 ========================================================= */
 
 
-function getOrientationAngle() {
+function getTiltValue(event) {
   if (
-    screen.orientation &&
-    typeof screen.orientation.angle === "number"
+    event.gamma === null ||
+    event.gamma === undefined ||
+    Number.isNaN(event.gamma)
   ) {
-    return screen.orientation.angle;
+    return null;
   }
 
-  if (typeof window.orientation === "number") {
-    return window.orientation;
+  let tilt = event.gamma;
+
+  if (REVERSE_TILT_DIRECTION) {
+    tilt = -tilt;
   }
 
+  return tilt;
 }
 
 let currentLandscapeSide = 1;
 let lastOrientationAngle = 0;
 
-
-const angle = getOrientationAngle();
-
-if (Math.abs(angle) === 90 || angle === 270) {
-    useGammaAxis = true;
-
-    // Choose the sign based on the landscape direction
-    gammaSign = (angle === 90) ? -1 : 1;
-} else {
-    useGammaAxis = false;
-}
-function getTiltValue(event) {
-    if (event.gamma == null) {
-        return null;
-    }
-
-    return -event.gamma;   // or event.gamma if the direction feels reversed
-}
 
 function smoothTilt(rawTilt) {
   if (filteredTilt === null) {
@@ -408,9 +374,9 @@ async function enterGameMode() {
 function startInitialCalibration() {
   clearInterval(calibrationInterval);
 
-  initialCalibrationComplete = false;
-  recalibrating = false;
-  gestureLocked = true;
+initialCalibrationComplete = false;
+gestureLocked = true;
+waitingForNeutral = false;
 
   neutralTilt = null;
   filteredTilt = null;
@@ -452,113 +418,6 @@ function startInitialCalibration() {
   }, 1000);
 }
 
-/* =========================================================
-   RECALIBRATION AFTER EVERY GUESS
-========================================================= */
-
-function beginNeutralRecalibration() {
-  recalibrating = true;
-  gestureLocked = true;
-
-  recalibrationSamples = [];
-  stableFrameCount = 0;
-  previousCalibrationTilt = null;
-
-  recalibrationStartTime = performance.now();
-
-  resetTriggerCounters();
-
-  setStatus(
-    "Return the phone to a comfortable position"
-  );
-}
-
-function processNeutralRecalibration(currentTilt) {
-  const elapsed =
-    performance.now() - recalibrationStartTime;
-
-  /*
-    Gives the player time to return the phone after
-    making a gesture.
-  */
-  if (elapsed < RECALIBRATION_DELAY) {
-    previousCalibrationTilt = currentTilt;
-    return;
-  }
-
-  if (previousCalibrationTilt === null) {
-    previousCalibrationTilt = currentTilt;
-    return;
-  }
-
-  const movement = Math.abs(
-    currentTilt - previousCalibrationTilt
-  );
-
-  previousCalibrationTilt = currentTilt;
-
-  /*
-    Collect readings only while the phone is stable.
-  */
-  if (movement <= STABILITY_THRESHOLD) {
-    stableFrameCount++;
-    recalibrationSamples.push(currentTilt);
-
-    if (
-      recalibrationSamples.length >
-      CALIBRATION_SAMPLE_COUNT
-    ) {
-      recalibrationSamples.shift();
-    }
-  } else {
-    stableFrameCount = 0;
-    recalibrationSamples = [];
-  }
-
-  const stableEnough =
-    stableFrameCount >= REQUIRED_STABLE_FRAMES &&
-    recalibrationSamples.length >=
-      CALIBRATION_SAMPLE_COUNT;
-
-  const timedOut =
-    elapsed >= RECALIBRATION_TIMEOUT;
-
-  if (stableEnough || timedOut) {
-    finishNeutralRecalibration(currentTilt);
-  }
-}
-
-function finishNeutralRecalibration(fallbackTilt) {
-  let newNeutral = fallbackTilt;
-
-  if (recalibrationSamples.length > 0) {
-    const total = recalibrationSamples.reduce(
-      (sum, value) => sum + value,
-      0
-    );
-
-    newNeutral =
-      total / recalibrationSamples.length;
-  }
-
-  neutralTilt = newNeutral;
-
-  /*
-    Restart filtering from the newly calculated neutral.
-  */
-  filteredTilt = newNeutral;
-
-  recalibrating = false;
-  gestureLocked = false;
-
-  recalibrationSamples = [];
-  stableFrameCount = 0;
-  previousCalibrationTilt = null;
-
-  resetTriggerCounters();
-
-  setStatus("Ready");
-}
 
 /* =========================================================
    SENSOR HANDLER
@@ -578,59 +437,67 @@ function handleOrientation(event) {
   const currentTilt = smoothTilt(rawTilt);
 
   /*
-    Continuously establish neutral position during the
-    starting countdown.
+    During the starting countdown, continuously record the
+    player's resting position.
   */
   if (!initialCalibrationComplete) {
     neutralTilt = currentTilt;
 
     if (SHOW_SENSOR_DEBUG) {
       setStatus(
-    `orientation=${getOrientationAngle()}
-     beta=${event.beta.toFixed(1)}
-     gamma=${event.gamma.toFixed(1)}`
-);
+        `Calibrating | gamma: ${event.gamma.toFixed(1)}°`
+      );
     }
 
     return;
   }
 
-  /*
-    Establish a new neutral position after every answer.
-  */
-  if (recalibrating) {
-    processNeutralRecalibration(currentTilt);
-
-    if (SHOW_SENSOR_DEBUG) {
-     setStatus(
-    `orientation=${getOrientationAngle()}
-     beta=${event.beta.toFixed(1)}
-     gamma=${event.gamma.toFixed(1)}`
-);
-    }
-
-    return;
-  }
-
-  if (gestureLocked || neutralTilt === null) {
+  if (neutralTilt === null) {
     return;
   }
 
   const relativeTilt = currentTilt - neutralTilt;
 
+  /*
+    After an answer, do not allow another gesture until the
+    phone returns close to its original position.
+  */
+  if (waitingForNeutral) {
+    if (
+      Math.abs(relativeTilt) <=
+      RETURN_TO_NEUTRAL_THRESHOLD
+    ) {
+      waitingForNeutral = false;
+      gestureLocked = false;
+      resetTriggerCounters();
+      setStatus("Ready");
+    } else if (SHOW_SENSOR_DEBUG) {
+      setStatus(
+        `Return to centre | tilt: ${relativeTilt.toFixed(1)}°`
+      );
+    }
+
+    return;
+  }
+
+  if (gestureLocked) {
+    return;
+  }
+
   if (SHOW_SENSOR_DEBUG) {
-       setStatus(
-    `orientation=${getOrientationAngle()}
-     beta=${event.beta.toFixed(1)}
-     gamma=${event.gamma.toFixed(1)}`
-);
+    setStatus(
+      `gamma: ${event.gamma.toFixed(1)}° | ` +
+      `tilt: ${relativeTilt.toFixed(1)}°`
+    );
   }
 
   if (relativeTilt >= CORRECT_THRESHOLD) {
     correctFrameCount++;
     passFrameCount = 0;
 
-    if (correctFrameCount >= REQUIRED_TRIGGER_FRAMES) {
+    if (
+      correctFrameCount >= REQUIRED_TRIGGER_FRAMES
+    ) {
       resetTriggerCounters();
       registerCorrect("sensor");
     }
@@ -642,7 +509,9 @@ function handleOrientation(event) {
     passFrameCount++;
     correctFrameCount = 0;
 
-    if (passFrameCount >= REQUIRED_TRIGGER_FRAMES) {
+    if (
+      passFrameCount >= REQUIRED_TRIGGER_FRAMES
+    ) {
       resetTriggerCounters();
       registerPass("sensor");
     }
@@ -656,16 +525,13 @@ function handleOrientation(event) {
     setStatus("Ready");
   }
 }
-
 /* =========================================================
    CORRECT AND PASS
 ========================================================= */
-
 function registerCorrect(source = "sensor") {
   if (
     !gameRunning ||
     !initialCalibrationComplete ||
-    recalibrating ||
     gestureLocked
   ) {
     return;
@@ -693,10 +559,11 @@ function registerCorrect(source = "sensor") {
     clearCardState();
     displayNextWord();
 
-    /*
-      A new neutral angle is calculated after every guess.
-    */
+    waitingForNeutral = true;
+    gestureLocked = true;
+    resetTriggerCounters();
 
+    setStatus("Return phone to centre");
   }, FEEDBACK_DURATION);
 }
 
@@ -704,7 +571,6 @@ function registerPass(source = "sensor") {
   if (
     !gameRunning ||
     !initialCalibrationComplete ||
-    recalibrating ||
     gestureLocked
   ) {
     return;
@@ -729,10 +595,13 @@ function registerPass(source = "sensor") {
     clearCardState();
     displayNextWord();
 
+    waitingForNeutral = true;
+    gestureLocked = true;
+    resetTriggerCounters();
 
+    setStatus("Return phone to centre");
   }, FEEDBACK_DURATION);
 }
-
 /* =========================================================
    MANUAL BUTTONS
 ========================================================= */
@@ -740,7 +609,6 @@ function registerPass(source = "sensor") {
 function handleManualCorrect() {
   if (
     !gameRunning ||
-    recalibrating ||
     gestureLocked
   ) {
     return;
@@ -752,7 +620,6 @@ function handleManualCorrect() {
 function handleManualPass() {
   if (
     !gameRunning ||
-    recalibrating ||
     gestureLocked
   ) {
     return;
@@ -806,17 +673,13 @@ async function startGame() {
     score = 0;
     timeLeft = GAME_DURATION;
 
-    gameRunning = true;
-    initialCalibrationComplete = false;
-    recalibrating = false;
-    gestureLocked = true;
+gameRunning = true;
+initialCalibrationComplete = false;
+gestureLocked = true;
+waitingForNeutral = false;
 
     neutralTilt = null;
     filteredTilt = null;
-
-    recalibrationSamples = [];
-    stableFrameCount = 0;
-    previousCalibrationTilt = null;
 
     resetTriggerCounters();
 
@@ -843,10 +706,10 @@ async function startGame() {
 }
 
 function endGame() {
-  gameRunning = false;
-  initialCalibrationComplete = false;
-  recalibrating = false;
-  gestureLocked = true;
+gameRunning = false;
+initialCalibrationComplete = false;
+gestureLocked = true;
+waitingForNeutral = false;
 
   clearInterval(timerInterval);
   clearInterval(calibrationInterval);
@@ -871,60 +734,11 @@ async function restartGame() {
 }
 
 /* =========================================================
-   ORIENTATION CHANGE
-========================================================= */
-
-function handleOrientationChange() {
-  if (!gameRunning) {
-    return;
-  }
-
-  /*
-    Recalculate neutral if the player rotates the phone
-    during the round.
-  */
-  filteredTilt = null;
-  neutralTilt = null;
-
-  recalibrating = true;
-  gestureLocked = true;
-
-  recalibrationSamples = [];
-  stableFrameCount = 0;
-  previousCalibrationTilt = null;
-
-  recalibrationStartTime = performance.now();
-
-  resetTriggerCounters();
-
-  setStatus("Hold steady while recalibrating");
-}
-
-/* =========================================================
    EVENT LISTENERS
 ========================================================= */
 
-window.addEventListener("orientationchange", () => {
 
 
-  if (gameRunning) {
-    filteredTilt = null;
-    neutralTilt = null;
-
-  }
-});
-
-if (screen.orientation) {
-  screen.orientation.addEventListener("change", () => {
-
-
-    if (gameRunning) {
-      filteredTilt = null;
-      neutralTilt = null;
-
-    }
-  });
-}
 
 if (startButton) {
   startButton.addEventListener(
@@ -954,10 +768,7 @@ if (passButton) {
   );
 }
 
-window.addEventListener(
-  "orientationchange",
-  handleOrientationChange
-);
+
 
 /* =========================================================
    INITIAL SCREEN
