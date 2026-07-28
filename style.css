@@ -182,18 +182,7 @@ button {
 /* Start screen */
 
 .hero-screen {
-  background:
-    radial-gradient(
-      circle at 24% 34%,
-      rgba(34, 185, 87, 0.09),
-      transparent 25%
-    ),
-    radial-gradient(
-      circle at 70% 74%,
-      rgba(49, 92, 198, 0.12),
-      transparent 28%
-    ),;
-    background: #1479d2;
+  background:  #f7f9fd;;
 }
 
 

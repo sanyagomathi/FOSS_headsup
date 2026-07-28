@@ -106,8 +106,8 @@ const FEEDBACK_DURATION = 500;
   comfortable position. The script waits for stable readings
   and calculates a new neutral angle.
 */
-const RECALIBRATION_DELAY = 3000;
-const RECALIBRATION_TIMEOUT = 5000;
+const RECALIBRATION_DELAY = 2000;
+const RECALIBRATION_TIMEOUT = 4000;
 const REQUIRED_STABLE_FRAMES = 10;
 const CALIBRATION_SAMPLE_COUNT = 12;
 const STABILITY_THRESHOLD = 1.2;
@@ -289,66 +289,54 @@ function getScreenOrientationAngle() {
   return 0;
 }
 
+let currentLandscapeSide = 1;
+let lastOrientationAngle = 0;
+
+
+
+function updateLandscapeSide() {
+  const angle = getOrientationAngle();
+
+  lastOrientationAngle = angle;
+
+  if (angle === 90) {
+    currentLandscapeSide = 1;
+  } else if (angle === -90 || angle === 270) {
+    currentLandscapeSide = -1;
+  } else {
+    currentLandscapeSide = 1;
+  }
+}
+
 function getTiltValue(event) {
-    const beta = event.beta;
-    const gamma = event.gamma;
+  const beta = event.beta;
+  const gamma = event.gamma;
 
-    if (beta == null || gamma == null) return null;
+  if (
+    beta === null ||
+    gamma === null ||
+    Number.isNaN(beta) ||
+    Number.isNaN(gamma)
+  ) {
+    return null;
+  }
 
-    let tilt;
+  const angle = getOrientationAngle();
+  let tilt;
 
-    // Screen Orientation API (modern browsers)
-    if (screen.orientation && typeof screen.orientation.angle === "number") {
+  if (angle === 90) {
+    tilt = gamma;
+  } else if (angle === -90 || angle === 270) {
+    tilt = -gamma;
+  } else {
+    /*
+      Portrait fallback. This also helps when Safari reports
+      the orientation angle incorrectly.
+    */
+    tilt = beta;
+  }
 
-        switch (screen.orientation.angle) {
-
-            case 90:       // Landscape Left
-                tilt = gamma;
-                break;
-
-            case 270:      // Landscape Right
-            case -90:
-                tilt = -gamma;
-                break;
-
-            case 180:      // Upside-down portrait
-                tilt = -beta;
-                break;
-
-            default:       // Portrait
-                tilt = beta;
-        }
-
-    }
-    // Older iPhones
-    else if (typeof window.orientation === "number") {
-
-        switch (window.orientation) {
-
-            case 90:
-                tilt = gamma;
-                break;
-
-            case -90:
-                tilt = -gamma;
-                break;
-
-            case 180:
-                tilt = -beta;
-                break;
-
-            default:
-                tilt = beta;
-        }
-
-    } else {
-        tilt = beta;
-    }
-
-    if (REVERSE_TILT_DIRECTION)
-        tilt = -tilt;
-
-    return tilt;
+  return REVERSE_TILT_DIRECTION ? -tilt : tilt;
 }
 
 function shortestAngleDifference(current, neutral) {
@@ -391,13 +379,10 @@ function resetTriggerCounters() {
 async function requestMotionPermission() {
   if (!window.DeviceOrientationEvent) {
     throw new Error(
-      "Motion sensors are not supported by this browser."
+      "Device orientation is not supported on this phone."
     );
   }
 
-  /*
-    iPhone and iPad require permission from a button click.
-  */
   if (
     typeof DeviceOrientationEvent.requestPermission ===
     "function"
@@ -407,20 +392,24 @@ async function requestMotionPermission() {
 
     if (permission !== "granted") {
       throw new Error(
-        "Motion permission was denied. Please enable Motion and Orientation Access."
+        "Motion access was denied. Enable Motion & Orientation Access in Safari settings."
       );
     }
   }
 
-  if (!motionEnabled) {
-    window.addEventListener(
-      "deviceorientation",
-      handleOrientation,
-      true
-    );
+  window.removeEventListener(
+    "deviceorientation",
+    handleOrientation,
+    true
+  );
 
-    motionEnabled = true;
-  }
+  window.addEventListener(
+    "deviceorientation",
+    handleOrientation,
+    true
+  );
+
+  motionEnabled = true;
 }
 
 /* =========================================================
@@ -613,7 +602,6 @@ function finishNeutralRecalibration(fallbackTilt) {
 /* =========================================================
    SENSOR HANDLER
 ========================================================= */
-
 function handleOrientation(event) {
   if (!gameRunning || !motionEnabled) {
     return;
@@ -622,21 +610,22 @@ function handleOrientation(event) {
   const rawTilt = getTiltValue(event);
 
   if (rawTilt === null) {
+    setStatus("No sensor data received");
     return;
   }
 
   const currentTilt = smoothTilt(rawTilt);
 
   /*
-    During initial calibration, keep calculating the neutral
-    angle continuously.
+    Continuously establish neutral position during the
+    starting countdown.
   */
   if (!initialCalibrationComplete) {
     neutralTilt = currentTilt;
 
     if (SHOW_SENSOR_DEBUG) {
       setStatus(
-        `Calibrating: ${currentTilt.toFixed(1)}°`
+        `Calibrating | raw: ${rawTilt.toFixed(1)}° | neutral: ${neutralTilt.toFixed(1)}°`
       );
     }
 
@@ -644,55 +633,37 @@ function handleOrientation(event) {
   }
 
   /*
-    After each guess, calculate a new neutral angle.
+    Establish a new neutral position after every answer.
   */
   if (recalibrating) {
     processNeutralRecalibration(currentTilt);
 
     if (SHOW_SENSOR_DEBUG) {
       setStatus(
-        `Recalibrating: ${currentTilt.toFixed(1)}°`
+        `Recalibrating | tilt: ${currentTilt.toFixed(1)}°`
       );
     }
 
     return;
   }
 
-  if (
-    gestureLocked ||
-    neutralTilt === null
-  ) {
+  if (gestureLocked || neutralTilt === null) {
     return;
   }
 
-let relativeTilt = currentTilt - neutralTilt;
-
-// Flip automatically depending on landscape orientation
-const angle =
-    screen.orientation?.angle ??
-    window.orientation ??
-    0;
-
-if (angle === 270 || angle === -90) {
-    relativeTilt *= -1;
-}
+  const relativeTilt = currentTilt - neutralTilt;
 
   if (SHOW_SENSOR_DEBUG) {
     setStatus(
-      `Tilt: ${relativeTilt.toFixed(1)}°`
+      `Tilt: ${relativeTilt.toFixed(1)}° | angle: ${getOrientationAngle()}°`
     );
   }
 
-  /*
-    Correct gesture.
-  */
   if (relativeTilt >= CORRECT_THRESHOLD) {
     correctFrameCount++;
     passFrameCount = 0;
 
-    if (
-      correctFrameCount >= REQUIRED_TRIGGER_FRAMES
-    ) {
+    if (correctFrameCount >= REQUIRED_TRIGGER_FRAMES) {
       resetTriggerCounters();
       registerCorrect("sensor");
     }
@@ -700,16 +671,11 @@ if (angle === 270 || angle === -90) {
     return;
   }
 
-  /*
-    Pass gesture.
-  */
   if (relativeTilt <= PASS_THRESHOLD) {
     passFrameCount++;
     correctFrameCount = 0;
 
-    if (
-      passFrameCount >= REQUIRED_TRIGGER_FRAMES
-    ) {
+    if (passFrameCount >= REQUIRED_TRIGGER_FRAMES) {
       resetTriggerCounters();
       registerPass("sensor");
     }
@@ -973,6 +939,29 @@ function handleOrientationChange() {
 /* =========================================================
    EVENT LISTENERS
 ========================================================= */
+updateLandscapeSide();
+
+window.addEventListener("orientationchange", () => {
+  updateLandscapeSide();
+
+  if (gameRunning) {
+    filteredTilt = null;
+    neutralTilt = null;
+    beginNeutralRecalibration();
+  }
+});
+
+if (screen.orientation) {
+  screen.orientation.addEventListener("change", () => {
+    updateLandscapeSide();
+
+    if (gameRunning) {
+      filteredTilt = null;
+      neutralTilt = null;
+      beginNeutralRecalibration();
+    }
+  });
+}
 
 if (startButton) {
   startButton.addEventListener(
