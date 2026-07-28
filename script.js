@@ -290,30 +290,65 @@ function getScreenOrientationAngle() {
 }
 
 function getTiltValue(event) {
-  const angle = getScreenOrientationAngle();
+    const beta = event.beta;
+    const gamma = event.gamma;
 
-  let tilt;
+    if (beta == null || gamma == null) return null;
 
-  if (angle === 90) {
-    // Landscape: phone rotated clockwise
-    tilt = -event.gamma;
-  } else if (angle === -90 || angle === 270) {
-    // Landscape: phone rotated anticlockwise
-    tilt = event.gamma;
-  } else {
-    // Portrait fallback
-    tilt = event.beta;
-  }
+    let tilt;
 
-  if (
-    tilt === null ||
-    tilt === undefined ||
-    Number.isNaN(tilt)
-  ) {
-    return null;
-  }
+    // Screen Orientation API (modern browsers)
+    if (screen.orientation && typeof screen.orientation.angle === "number") {
 
-  return REVERSE_TILT_DIRECTION ? -tilt : tilt;
+        switch (screen.orientation.angle) {
+
+            case 90:       // Landscape Left
+                tilt = gamma;
+                break;
+
+            case 270:      // Landscape Right
+            case -90:
+                tilt = -gamma;
+                break;
+
+            case 180:      // Upside-down portrait
+                tilt = -beta;
+                break;
+
+            default:       // Portrait
+                tilt = beta;
+        }
+
+    }
+    // Older iPhones
+    else if (typeof window.orientation === "number") {
+
+        switch (window.orientation) {
+
+            case 90:
+                tilt = gamma;
+                break;
+
+            case -90:
+                tilt = -gamma;
+                break;
+
+            case 180:
+                tilt = -beta;
+                break;
+
+            default:
+                tilt = beta;
+        }
+
+    } else {
+        tilt = beta;
+    }
+
+    if (REVERSE_TILT_DIRECTION)
+        tilt = -tilt;
+
+    return tilt;
 }
 
 function shortestAngleDifference(current, neutral) {
@@ -630,10 +665,18 @@ function handleOrientation(event) {
     return;
   }
 
-const relativeTilt = shortestAngleDifference(
-  currentTilt,
-  neutralTilt
-);
+let relativeTilt = currentTilt - neutralTilt;
+
+// Flip automatically depending on landscape orientation
+const angle =
+    screen.orientation?.angle ??
+    window.orientation ??
+    0;
+
+if (angle === 270 || angle === -90) {
+    relativeTilt *= -1;
+}
+
   if (SHOW_SENSOR_DEBUG) {
     setStatus(
       `Tilt: ${relativeTilt.toFixed(1)}°`
