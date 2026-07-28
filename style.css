@@ -335,8 +335,10 @@ button {
   justify-content: center;
   gap: 17px;
 
-  border: 0;
+  border: 2px;
   border-radius: 13px;
+  border-color: black;
+  border-style: solid;
 
   font-size: 17px;
   font-weight: 700;
@@ -345,15 +347,13 @@ button {
   background:
     linear-gradient(
       135deg,
-      var(--primary-blue),
+      var(--foss-green),
       #376ae4
     );
 
   cursor: pointer;
 
-  box-shadow:
-    0 14px 28px rgba(49, 92, 198, 0.24);
-
+  
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease;

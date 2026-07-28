@@ -77,14 +77,14 @@ const INITIAL_CALIBRATION_SECONDS = 3;
   Increase these values if accidental guesses happen.
   Reduce these values if tilting feels too difficult.
 */
-const CORRECT_THRESHOLD = 20;
-const PASS_THRESHOLD = -20;
+const CORRECT_THRESHOLD = 30;
+const PASS_THRESHOLD = -30;
 
 /*
   Number of consecutive readings required before a gesture
   is accepted.
 */
-const REQUIRED_TRIGGER_FRAMES = 3;
+const REQUIRED_TRIGGER_FRAMES = 5;
 
 /*
   Smooths small sensor movements.
@@ -106,8 +106,8 @@ const FEEDBACK_DURATION = 500;
   comfortable position. The script waits for stable readings
   and calculates a new neutral angle.
 */
-const RECALIBRATION_DELAY = 2000;
-const RECALIBRATION_TIMEOUT = 4000;
+const RECALIBRATION_DELAY = 1000;
+const RECALIBRATION_TIMEOUT = 3000;
 const REQUIRED_STABLE_FRAMES = 10;
 const CALIBRATION_SAMPLE_COUNT = 12;
 const STABILITY_THRESHOLD = 1.2;
@@ -115,7 +115,7 @@ const STABILITY_THRESHOLD = 1.2;
 /*
   Set true while testing to display sensor values.
 */
-const SHOW_SENSOR_DEBUG = true;
+const SHOW_SENSOR_DEBUG = false;
 
 /*
   Change this to true if Correct and Pass are reversed
@@ -294,20 +294,6 @@ let lastOrientationAngle = 0;
 
 
 
-function updateLandscapeSide() {
-  const angle = getOrientationAngle();
-
-  lastOrientationAngle = angle;
-
-  if (angle === 90) {
-    currentLandscapeSide = 1;
-  } else if (angle === -90 || angle === 270) {
-    currentLandscapeSide = -1;
-  } else {
-    currentLandscapeSide = 1;
-  }
-}
-
 function getTiltValue(event) {
   const beta = event.beta;
   const gamma = event.gamma;
@@ -325,9 +311,9 @@ function getTiltValue(event) {
   let tilt;
 
   if (angle === 90) {
-    tilt = gamma;
-  } else if (angle === -90 || angle === 270) {
     tilt = -gamma;
+  } else if (angle === -90 || angle === 270) {
+    tilt = gamma;
   } else {
     /*
       Portrait fallback. This also helps when Safari reports
@@ -339,19 +325,6 @@ function getTiltValue(event) {
   return REVERSE_TILT_DIRECTION ? -tilt : tilt;
 }
 
-function shortestAngleDifference(current, neutral) {
-  let difference = current - neutral;
-
-  while (difference > 180) {
-    difference -= 360;
-  }
-
-  while (difference < -180) {
-    difference += 360;
-  }
-
-  return difference;
-}
 
 function smoothTilt(rawTilt) {
   if (filteredTilt === null) {
