@@ -115,7 +115,7 @@ const STABILITY_THRESHOLD = 1.2;
 /*
   Set true while testing to display sensor values.
 */
-const SHOW_SENSOR_DEBUG = false;
+const SHOW_SENSOR_DEBUG = true;
 
 /*
   Change this to true if Correct and Pass are reversed
@@ -286,7 +286,6 @@ function getOrientationAngle() {
     return window.orientation;
   }
 
-  return 0;
 }
 
 let currentLandscapeSide = 1;
