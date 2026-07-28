@@ -613,9 +613,11 @@ function handleOrientation(event) {
     processNeutralRecalibration(currentTilt);
 
     if (SHOW_SENSOR_DEBUG) {
-      setStatus(
-        `Recalibrating | tilt: ${currentTilt.toFixed(1)}°`
-      );
+     setStatus(
+    `orientation=${getOrientationAngle()}
+     beta=${event.beta.toFixed(1)}
+     gamma=${event.gamma.toFixed(1)}`
+);
     }
 
     return;
@@ -628,9 +630,11 @@ function handleOrientation(event) {
   const relativeTilt = currentTilt - neutralTilt;
 
   if (SHOW_SENSOR_DEBUG) {
-    setStatus(
-      `Tilt: ${relativeTilt.toFixed(1)}° | angle: ${getOrientationAngle()}°`
-    );
+       setStatus(
+    `orientation=${getOrientationAngle()}
+     beta=${event.beta.toFixed(1)}
+     gamma=${event.gamma.toFixed(1)}`
+);
   }
 
   if (relativeTilt >= CORRECT_THRESHOLD) {
