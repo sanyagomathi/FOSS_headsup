@@ -588,46 +588,15 @@ function handleOrientation(event) {
 
   const currentTilt = smoothTilt(rawTilt);
 
-  /*
-    Continuously establish neutral position during the
-    starting countdown.
-  */
-  if (!initialCalibrationComplete) {
-    neutralTilt = currentTilt;
-
-    if (SHOW_SENSOR_DEBUG) {
-      setStatus(
-        `Calibrating | raw: ${rawTilt.toFixed(1)}° | neutral: ${neutralTilt.toFixed(1)}°`
-      );
-    }
-
+  if (!initialCalibrationComplete || gestureLocked) {
     return;
   }
 
-  /*
-    Establish a new neutral position after every answer.
-  */
-  if (recalibrating) {
-    processNeutralRecalibration(currentTilt);
-
-    if (SHOW_SENSOR_DEBUG) {
-      setStatus(
-        `Recalibrating | tilt: ${currentTilt.toFixed(1)}°`
-      );
-    }
-
-    return;
-  }
-
-  if (gestureLocked || neutralTilt === null) {
-    return;
-  }
-
-  const relativeTilt = currentTilt - neutralTilt;
+  const relativeTilt = currentTilt;
 
   if (SHOW_SENSOR_DEBUG) {
     setStatus(
-      `Tilt: ${relativeTilt.toFixed(1)}° | angle: ${getOrientationAngle()}°`
+      `Tilt: ${relativeTilt.toFixed(1)}° | screen: ${getOrientationAngle()}°`
     );
   }
 
@@ -661,7 +630,6 @@ function handleOrientation(event) {
     setStatus("Ready");
   }
 }
-
 /* =========================================================
    CORRECT AND PASS
 ========================================================= */
@@ -698,10 +666,7 @@ function registerCorrect(source = "sensor") {
     clearCardState();
     displayNextWord();
 
-    /*
-      A new neutral angle is calculated after every guess.
-    */
-    beginNeutralRecalibration();
+
   }, FEEDBACK_DURATION);
 }
 
@@ -734,10 +699,6 @@ function registerPass(source = "sensor") {
     clearCardState();
     displayNextWord();
 
-    /*
-      A new neutral angle is calculated after every guess.
-    */
-    beginNeutralRecalibration();
   }, FEEDBACK_DURATION);
 }
 
@@ -887,25 +848,9 @@ function handleOrientationChange() {
     return;
   }
 
-  /*
-    Recalculate neutral if the player rotates the phone
-    during the round.
-  */
   filteredTilt = null;
-  neutralTilt = null;
-
-  recalibrating = true;
-  gestureLocked = true;
-
-  recalibrationSamples = [];
-  stableFrameCount = 0;
-  previousCalibrationTilt = null;
-
-  recalibrationStartTime = performance.now();
-
   resetTriggerCounters();
-
-  setStatus("Hold steady while recalibrating");
+  setStatus("Ready");
 }
 
 /* =========================================================
@@ -918,7 +863,7 @@ window.addEventListener("orientationchange", () => {
   if (gameRunning) {
     filteredTilt = null;
     neutralTilt = null;
-    beginNeutralRecalibration();
+
   }
 });
 
@@ -929,7 +874,7 @@ if (screen.orientation) {
     if (gameRunning) {
       filteredTilt = null;
       neutralTilt = null;
-      beginNeutralRecalibration();
+
     }
   });
 }
