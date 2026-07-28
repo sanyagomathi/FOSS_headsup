@@ -279,6 +279,19 @@ function getTiltValue(event) {
 let currentLandscapeSide = 1;
 let lastOrientationAngle = 0;
 
+function normalizeAngleDifference(current, previous) {
+  let difference = current - previous;
+
+  while (difference > 90) {
+    difference -= 180;
+  }
+
+  while (difference < -90) {
+    difference += 180;
+  }
+
+  return previous + difference;
+}
 
 function smoothTilt(rawTilt) {
   if (filteredTilt === null) {
@@ -286,10 +299,13 @@ function smoothTilt(rawTilt) {
     return filteredTilt;
   }
 
+  const normalizedTilt =
+    normalizeAngleDifference(rawTilt, filteredTilt);
+
   filteredTilt =
     filteredTilt +
     SMOOTHING_FACTOR *
-      (rawTilt - filteredTilt);
+      (normalizedTilt - filteredTilt);
 
   return filteredTilt;
 }
@@ -428,7 +444,22 @@ function handleOrientation(event) {
   }
 
   const rawTilt = getTiltValue(event);
+  function smoothTilt(rawTilt) {
+    if (filteredTilt === null) {
+      filteredTilt = rawTilt;
+      return filteredTilt;
+    }
 
+  const normalizedTilt =
+    normalizeAngleDifference(rawTilt, filteredTilt);
+
+  filteredTilt =
+    filteredTilt +
+    SMOOTHING_FACTOR *
+      (normalizedTilt - filteredTilt);
+
+  return filteredTilt;
+}
   if (rawTilt === null) {
     setStatus("No sensor data received");
     return;
