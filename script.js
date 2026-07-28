@@ -84,7 +84,7 @@ const PASS_THRESHOLD = -30;
   Number of consecutive readings required before a gesture
   is accepted.
 */
-const REQUIRED_TRIGGER_FRAMES = 5;
+const REQUIRED_TRIGGER_FRAMES = 8;
 
 /*
   Smooths small sensor movements.
@@ -121,7 +121,7 @@ const SHOW_SENSOR_DEBUG = true;
   Change this to true if Correct and Pass are reversed
   on your phone.
 */
-const REVERSE_TILT_DIRECTION = false;
+const REVERSE_TILT_DIRECTION = true;
 
 /* =========================================================
    GAME STATE
@@ -310,9 +310,9 @@ function getTiltValue(event) {
   let tilt;
 
   if (angle === 90) {
-    tilt = -gamma;
-  } else if (angle === -90 || angle === 270) {
     tilt = gamma;
+  } else if (angle === -90 || angle === 270) {
+    tilt = -gamma;
   } else {
     /*
       Portrait fallback. This also helps when Safari reports
