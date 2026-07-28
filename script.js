@@ -274,7 +274,7 @@ function vibrate(pattern) {
    SENSOR HELPERS
 ========================================================= */
 
-function getScreenOrientationAngle() {
+function getOrientationAngle() {
   if (
     screen.orientation &&
     typeof screen.orientation.angle === "number"
