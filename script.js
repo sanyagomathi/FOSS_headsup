@@ -912,10 +912,9 @@ function handleOrientationChange() {
 /* =========================================================
    EVENT LISTENERS
 ========================================================= */
-updateLandscapeSide();
 
 window.addEventListener("orientationchange", () => {
-  updateLandscapeSide();
+
 
   if (gameRunning) {
     filteredTilt = null;
@@ -926,7 +925,7 @@ window.addEventListener("orientationchange", () => {
 
 if (screen.orientation) {
   screen.orientation.addEventListener("change", () => {
-    updateLandscapeSide();
+
 
     if (gameRunning) {
       filteredTilt = null;
