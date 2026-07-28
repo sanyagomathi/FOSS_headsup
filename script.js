@@ -155,6 +155,9 @@ let timerInterval = null;
 let calibrationInterval = null;
 let feedbackTimeout = null;
 
+let useGammaAxis = true;
+let gammaSign = 1;
+
 /* =========================================================
    SCREEN HELPERS
 ========================================================= */
@@ -274,6 +277,7 @@ function vibrate(pattern) {
    SENSOR HELPERS
 ========================================================= */
 
+
 function getOrientationAngle() {
   if (
     screen.orientation &&
@@ -292,38 +296,23 @@ let currentLandscapeSide = 1;
 let lastOrientationAngle = 0;
 
 
+const angle = getOrientationAngle();
 
-function getTiltValue(event) {
-  const beta = event.beta;
-  const gamma = event.gamma;
+if (Math.abs(angle) === 90 || angle === 270) {
+    useGammaAxis = true;
 
-  if (
-    beta === null ||
-    gamma === null ||
-    Number.isNaN(beta) ||
-    Number.isNaN(gamma)
-  ) {
-    return null;
-  }
-
-  const angle = getOrientationAngle();
-  let tilt;
-
-  if (angle === 90) {
-    tilt = gamma;
-  } else if (angle === -90 || angle === 270) {
-    tilt = -gamma;
-  } else {
-    /*
-      Portrait fallback. This also helps when Safari reports
-      the orientation angle incorrectly.
-    */
-    tilt = beta;
-  }
-
-  return REVERSE_TILT_DIRECTION ? -tilt : tilt;
+    // Choose the sign based on the landscape direction
+    gammaSign = (angle === 90) ? -1 : 1;
+} else {
+    useGammaAxis = false;
 }
+function getTiltValue(event) {
+    if (event.gamma == null) {
+        return null;
+    }
 
+    return -event.gamma;   // or event.gamma if the direction feels reversed
+}
 
 function smoothTilt(rawTilt) {
   if (filteredTilt === null) {
@@ -707,7 +696,7 @@ function registerCorrect(source = "sensor") {
     /*
       A new neutral angle is calculated after every guess.
     */
-    beginNeutralRecalibration();
+
   }, FEEDBACK_DURATION);
 }
 
@@ -740,10 +729,7 @@ function registerPass(source = "sensor") {
     clearCardState();
     displayNextWord();
 
-    /*
-      A new neutral angle is calculated after every guess.
-    */
-    beginNeutralRecalibration();
+
   }, FEEDBACK_DURATION);
 }
 
@@ -924,7 +910,7 @@ window.addEventListener("orientationchange", () => {
   if (gameRunning) {
     filteredTilt = null;
     neutralTilt = null;
-    beginNeutralRecalibration();
+
   }
 });
 
@@ -935,7 +921,7 @@ if (screen.orientation) {
     if (gameRunning) {
       filteredTilt = null;
       neutralTilt = null;
-      beginNeutralRecalibration();
+
     }
   });
 }
