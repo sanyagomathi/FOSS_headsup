@@ -206,32 +206,13 @@ button {
   margin-bottom: 18px;
   padding: 10px;
 
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-
   background: #ebf9f0;
 
   box-shadow:
     0 15px 35px rgba(29, 65, 51, 0.08);
 }
 
-.logo-box {
-  display: flex;
-  align-items: center;
-  justify-content: center;
 
-  font-size: 22px;
-  font-weight: 900;
-  color: white;
-}
-
-.logo-black {
-  background: var(--black);
-}
-
-.logo-green {
-  background: var(--foss-green);
-}
 
 .eyebrow {
   margin-bottom: 9px;
@@ -761,11 +742,29 @@ button {
     transform: scale(0.82);
   }
 
-  .game-logo {
-    width: 75px;
-    height: 75px;
-    margin-bottom: 10px;
-  }
+.game-logo {
+  width: 105px;
+  height: 105px;
+  margin-bottom: 18px;
+  padding: 8px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #ebf9f0;
+  border-radius: 18px;
+  overflow: hidden;
+
+  box-shadow: 0 15px 35px rgba(29, 65, 51, 0.08);
+}
+
+.game-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
 
   .hero-content h2 {
     font-size: 48px;
