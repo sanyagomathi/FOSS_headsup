@@ -34,9 +34,72 @@ const words = [
   "MySQL",
   "PostgreSQL",
   "VS Code",
-  "FreeCodeCamp"
+  "FreeCodeCamp",
+  "Bug",
+  "Debugging",
+  "Hacking",
+  "Coding",
+  "Program",
+  "Software",
+  "Hardware",
+  "Website",
+  "Webpage",
+  "Browser",
+  "Server",
+  "Database",
+  "Frontend",
+  "Backend",
+  "Full Stack",
+  "API",
+  "HTML",
+  "CSS",
+  "Variable",
+  "Function",
+  "Loop",
+  "Array",
+  "String",
+  "Integer",
+  "Boolean",
+  "Condition",
+  "Error",
+  "Syntax",
+  "Algorithm",
+  "Code Editor",
+  "Compiler",
+  "Username",
+  "Password",
+  "Login",
+  "Cloud",
+  "Network",
+  "Wi-Fi",
+  "IP Address",
+  "Download",
+  "Upload",
+  "File",
+  "Folder",
+  "Link",
+  "URL",
+  "Copy",
+  "Paste",
+  "Save",
+  "Delete",
+  "Refresh",
+  "Search",
+  "Install",
+  "Update",
+  "Keyboard",
+  "Mouse",
+  "Kernel",
+  "Firewall",
+  "Cookies",
+  "Malware",
+  "Virus",
+  "Restart",
+  "Copy & Paste",
+  "Fork",
+  "Pull Command",
+  "Crash"
 ];
-
 /* =========================================================
    DOM ELEMENTS
 ========================================================= */
@@ -102,7 +165,7 @@ const FEEDBACK_DURATION = 500;
 /*
   Set true while testing to display sensor values.
 */
-const SHOW_SENSOR_DEBUG = true;
+const SHOW_SENSOR_DEBUG = false;
 
 /*
   Change this to true if Correct and Pass are reversed
